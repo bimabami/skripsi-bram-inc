@@ -25,8 +25,10 @@ import {
   SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { CreateTeamDialog } from "./create-team-dialog";
 import { useTeams } from "@/contexts/teams-context";
+import { useInbox } from "@/contexts/inbox-context";
 import {
   Collapsible,
   CollapsibleContent,
@@ -35,9 +37,14 @@ import {
 import { TeamActions } from "./team-actions";
 import { TopicActions } from "./topic-actions";
 import { SubTopicActions } from "./subtopic-actions";
+import { InboxDrawer } from "./inbox-drawer";
+import { SearchDrawer } from "./search-drawer";
 
 export function AppSidebar() {
   const { teams, addTopic, addSubTopic, setSelectedSubTopic } = useTeams();
+  const { unreadCount } = useInbox();
+  const [inboxOpen, setInboxOpen] = React.useState(false);
+  const [searchOpen, setSearchOpen] = React.useState(false);
   const [openTeams, setOpenTeams] = React.useState<Record<string, boolean>>({});
   const [addingTopic, setAddingTopic] = React.useState<string | null>(null);
   const [addingSubTopic, setAddingSubTopic] = React.useState<{
@@ -46,6 +53,19 @@ export function AppSidebar() {
   } | null>(null);
   const [newTopicName, setNewTopicName] = React.useState("");
   const [newSubTopicName, setNewSubTopicName] = React.useState("");
+
+  // Global keyboard shortcut for search (Ctrl+K or Cmd+K)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const handleSubTopicClick = (
     teamId: string,
@@ -107,15 +127,20 @@ export function AppSidebar() {
         <SidebarGroup className="px-4 pt-0 border-b">
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton>
+              <SidebarMenuButton onClick={() => setSearchOpen(true)}>
                 <Search />
                 <span>Search</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton>
+              <SidebarMenuButton onClick={() => setInboxOpen(true)}>
                 <Inbox />
                 <span>Inbox</span>
+                {unreadCount > 0 && (
+                  <Badge className="ml-auto h-5 w-5 flex items-center justify-center rounded-[4px] bg-yellow-500 text-xs font-semibold text-black hover:bg-yellow-500">
+                    {unreadCount}
+                  </Badge>
+                )}
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
@@ -126,6 +151,9 @@ export function AppSidebar() {
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
+        
+        <SearchDrawer open={searchOpen} onOpenChange={setSearchOpen} />
+        <InboxDrawer open={inboxOpen} onOpenChange={setInboxOpen} />
 
         {/* Teams List */}
         {teams.map((team) => (

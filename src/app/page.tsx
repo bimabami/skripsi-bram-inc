@@ -4,6 +4,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TeamsProvider, useTeams } from "@/contexts/teams-context";
 import { JobsProvider } from "@/contexts/jobs-context";
+import { InboxProvider } from "@/contexts/inbox-context";
 import { JobsTable } from "@/components/jobs-table";
 
 function HomeContent() {
@@ -65,7 +66,9 @@ export default function Home() {
   return (
     <JobsProvider>
       <TeamsProvider>
-        <HomeContent />
+        <InboxProvider>
+          <HomeContent />
+        </InboxProvider>
       </TeamsProvider>
     </JobsProvider>
   );
