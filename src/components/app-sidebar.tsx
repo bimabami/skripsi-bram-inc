@@ -84,6 +84,7 @@ export function AppSidebar() {
       subTopicDescription,
       teamName,
       topicName,
+      selectedJobId: undefined,
     });
   };
 

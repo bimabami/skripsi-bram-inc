@@ -39,6 +39,7 @@ interface SearchResult {
   topicName?: string;
   subTopicName?: string;
   subTopicDescription?: string;
+  jobId?: string;
 }
 
 export function SearchDrawer({ open, onOpenChange }: SearchDrawerProps) {
@@ -147,6 +148,7 @@ export function SearchDrawer({ open, onOpenChange }: SearchDrawerProps) {
             topicName: topic.name,
             subTopicName: subTopic.name,
             subTopicDescription: subTopic.description,
+            jobId: job.id,
           });
         }
       }
@@ -156,8 +158,8 @@ export function SearchDrawer({ open, onOpenChange }: SearchDrawerProps) {
   }, [searchQuery, teams, jobs]);
 
   const handleResultClick = (result: SearchResult) => {
-    if (result.type === "subtopic" || result.type === "job") {
-      // Navigate to the subtopic
+    // For jobs, navigate to the subtopic AND open the job detail
+    if (result.type === "job") {
       setSelectedSubTopic({
         teamId: result.teamId!,
         topicId: result.topicId!,
@@ -166,9 +168,67 @@ export function SearchDrawer({ open, onOpenChange }: SearchDrawerProps) {
         subTopicDescription: result.subTopicDescription!,
         teamName: result.teamName!,
         topicName: result.topicName!,
+        selectedJobId: result.jobId,
       });
       onOpenChange(false);
       setSearchQuery("");
+    }
+    // For subtopics, navigate to the subtopic (clear any selected job)
+    else if (result.type === "subtopic") {
+      setSelectedSubTopic({
+        teamId: result.teamId!,
+        topicId: result.topicId!,
+        subTopicId: result.subTopicId!,
+        subTopicName: result.subTopicName!,
+        subTopicDescription: result.subTopicDescription!,
+        teamName: result.teamName!,
+        topicName: result.topicName!,
+        selectedJobId: undefined,
+      });
+      onOpenChange(false);
+      setSearchQuery("");
+    }
+    // For topics, navigate to the first subtopic if available (clear any selected job)
+    else if (result.type === "topic") {
+      const team = teams.find((t) => t.id === result.teamId);
+      const topic = team?.topics.find((t) => t.id === result.id);
+      const firstSubTopic = topic?.subTopics[0];
+      
+      if (team && topic && firstSubTopic) {
+        setSelectedSubTopic({
+          teamId: team.id,
+          topicId: topic.id,
+          subTopicId: firstSubTopic.id,
+          subTopicName: firstSubTopic.name,
+          subTopicDescription: firstSubTopic.description,
+          teamName: team.name,
+          topicName: topic.name,
+          selectedJobId: undefined,
+        });
+        onOpenChange(false);
+        setSearchQuery("");
+      }
+    }
+    // For teams, navigate to the first subtopic of the first topic if available (clear any selected job)
+    else if (result.type === "team") {
+      const team = teams.find((t) => t.id === result.id);
+      const firstTopic = team?.topics[0];
+      const firstSubTopic = firstTopic?.subTopics[0];
+      
+      if (team && firstTopic && firstSubTopic) {
+        setSelectedSubTopic({
+          teamId: team.id,
+          topicId: firstTopic.id,
+          subTopicId: firstSubTopic.id,
+          subTopicName: firstSubTopic.name,
+          subTopicDescription: firstSubTopic.description,
+          teamName: team.name,
+          topicName: firstTopic.name,
+          selectedJobId: undefined,
+        });
+        onOpenChange(false);
+        setSearchQuery("");
+      }
     }
   };
 
@@ -240,16 +300,15 @@ export function SearchDrawer({ open, onOpenChange }: SearchDrawerProps) {
                 <button
                   key={`${result.type}-${result.id}`}
                   onClick={() => handleResultClick(result)}
-                  className="w-full px-6 py-4 hover:bg-muted/50 transition-colors text-left"
-                  disabled={result.type === "team" || result.type === "topic"}
+                  className="w-full px-6 py-4 hover:bg-blue-50 transition-colors text-left group cursor-pointer"
                 >
                   <div className="flex gap-3 items-start">
-                    <div className="flex-shrink-0 mt-1 text-muted-foreground">
+                    <div className="flex-shrink-0 mt-1 text-muted-foreground group-hover:text-blue-600 transition-colors">
                       {getIcon(result.type)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-sm line-clamp-1">
+                        <span className="font-semibold text-sm line-clamp-1 group-hover:text-blue-600 transition-colors">
                           {result.title}
                         </span>
                         <Badge
@@ -270,9 +329,7 @@ export function SearchDrawer({ open, onOpenChange }: SearchDrawerProps) {
                         </p>
                       )}
                     </div>
-                    {(result.type === "subtopic" || result.type === "job") && (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-1" />
-                    )}
+                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-blue-600 flex-shrink-0 mt-1 transition-colors" />
                   </div>
                 </button>
               ))}

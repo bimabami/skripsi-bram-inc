@@ -52,6 +52,7 @@ interface TeamsContextType {
     subTopicDescription: string;
     teamName: string;
     topicName: string;
+    selectedJobId?: string;
   } | null;
   setSelectedSubTopic: (
     selected: {
@@ -62,6 +63,7 @@ interface TeamsContextType {
       subTopicDescription: string;
       teamName: string;
       topicName: string;
+      selectedJobId?: string;
     } | null,
   ) => void;
 }
@@ -80,6 +82,7 @@ export function TeamsProvider({ children }: { children: React.ReactNode }) {
     subTopicDescription: string;
     teamName: string;
     topicName: string;
+    selectedJobId?: string;
   } | null>(null);
 
   const addTeam = React.useCallback((team: Omit<Team, "id" | "createdAt">) => {

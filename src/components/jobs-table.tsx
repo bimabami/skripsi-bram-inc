@@ -24,7 +24,6 @@ import {
   AlertTriangle,
   Zap,
   Calendar,
-  File,
   List,
   LayoutGrid,
   PieChart
@@ -124,7 +123,7 @@ export function JobsTable({
   topicName,
 }: JobsTableProps) {
   const { getJobsBySubTopic, addJob, updateJob, removeJob } = useJobs();
-  const { updateSubTopic } = useTeams();
+  const { updateSubTopic, selectedSubTopic } = useTeams();
   const jobs = getJobsBySubTopic(teamId, topicId, subTopicId);
   const [hasInitialized, setHasInitialized] = React.useState(false);
   const [currentPage, setCurrentPage] = React.useState(1);
@@ -135,6 +134,21 @@ export function JobsTable({
   const [isAddJobOpen, setIsAddJobOpen] = React.useState(false);
   const [selectedJobId, setSelectedJobId] = React.useState<string | null>(null);
   const [activeTab, setActiveTab] = React.useState<"list" | "status" | "chart">("list");
+
+  // Handle selectedJobId from context (e.g., from search)
+  React.useEffect(() => {
+    if (selectedSubTopic?.selectedJobId) {
+      setSelectedJobId(selectedSubTopic.selectedJobId);
+    } else if (selectedSubTopic?.selectedJobId === undefined) {
+      // Explicitly clear selectedJobId when it's undefined in context
+      setSelectedJobId(null);
+    }
+  }, [selectedSubTopic?.selectedJobId]);
+
+  // Reset selectedJobId when subtopic changes
+  React.useEffect(() => {
+    setSelectedJobId(null);
+  }, [subTopicId]);
   const [selectedJobs, setSelectedJobs] = React.useState<Set<string>>(
     new Set(),
   );
@@ -618,19 +632,13 @@ export function JobsTable({
                   Tanggal Selesai
                 </div>
               </TableHead>
-              <TableHead className="font-semibold text-gray-700 text-left">
-                <div className="flex items-center gap-2">
-                  <File className="w-4 h-4" />
-                  Dokumen
-                </div>
-              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {jobs.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={10}
+                  colSpan={9}
                   className="text-center py-12 text-gray-500"
                 >
                   Belum ada pekerjaan. Klik tombol &quot;+ Tambah
@@ -858,28 +866,13 @@ export function JobsTable({
                         job.endDate
                       )}
                     </TableCell>
-                    <TableCell className="text-center">
-                      {job.document ? (
-                        <div className="flex items-center gap-2 justify-center">
-                          <span className="text-sm">{job.document}</span>
-                        </div>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-gray-500"
-                        >
-                          <Plus className="h-3 w-3 mr-1" />
-                        </Button>
-                      )}
-                    </TableCell>
                   </TableRow>
                 );
               })
             )}
             {/* Add Job Row */}
             <TableRow className="hover:bg-gray-50">
-              <TableCell colSpan={10} className="py-3">
+              <TableCell colSpan={9} className="py-3">
                 <Dialog open={isAddJobOpen} onOpenChange={setIsAddJobOpen}>
                   <DialogTrigger asChild>
                     <Button
