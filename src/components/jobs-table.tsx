@@ -22,7 +22,6 @@ import {
   User,
   CheckCircle,
   AlertTriangle,
-  Zap,
   Calendar,
   List,
   LayoutGrid,
@@ -58,6 +57,8 @@ import {
 } from "@/components/ui/select";
 import { JobDetail } from "@/components/job-detail";
 import { JobsKanban } from "@/components/jobs-kanban";
+import { useMembersContext } from "@/contexts/members-context";
+import { useAuth } from "@/contexts/auth-context";
 
 interface JobsTableProps {
   teamId: string;
@@ -107,12 +108,6 @@ const getPriorityColor = (priority: JobPriority) => {
   }
 };
 
-const getProgressColor = (progress: number) => {
-  if (progress === 100) return "bg-green-500";
-  if (progress >= 50) return "bg-orange-500";
-  return "bg-orange-400";
-};
-
 export function JobsTable({
   teamId,
   topicId,
@@ -122,33 +117,55 @@ export function JobsTable({
   teamName,
   topicName,
 }: JobsTableProps) {
-  const { getJobsBySubTopic, addJob, updateJob, removeJob } = useJobs();
+  const { getJobsBySubTopic, addJob, updateJob, removeJob, fetchJobs } = useJobs();
   const { updateSubTopic, selectedSubTopic } = useTeams();
-  const jobs = getJobsBySubTopic(teamId, topicId, subTopicId);
-  const [hasInitialized, setHasInitialized] = React.useState(false);
+  const { members, currentUserRole } = useMembersContext();
+  const { user } = useAuth();
+  const allJobs = getJobsBySubTopic(teamId, topicId, subTopicId);
+  
+  // Check if current user is a manager
+  const isManager = currentUserRole === "MANAGER";
+  const currentUserId = user?.id;
+  
+  // Filter jobs - Staff can only see their own tasks, managers can see all
+  const jobs = React.useMemo(() => {
+    if (!isManager && currentUserId) {
+      return allJobs.filter((job) => job.workerId === currentUserId);
+    }
+    return allJobs;
+  }, [allJobs, isManager, currentUserId]);
   const [currentPage, setCurrentPage] = React.useState(1);
   const [isEditingDescription, setIsEditingDescription] = React.useState(false);
   const [editedDescription, setEditedDescription] = React.useState(
     subTopicDescription || "",
   );
   const [isAddJobOpen, setIsAddJobOpen] = React.useState(false);
-  const [selectedJobId, setSelectedJobId] = React.useState<string | null>(null);
+  // Initialize selectedJobId from context if available (for inbox navigation)
+  const [selectedJobId, setSelectedJobId] = React.useState<string | null>(
+    selectedSubTopic?.selectedJobId || null
+  );
   const [activeTab, setActiveTab] = React.useState<"list" | "status" | "chart">("list");
 
-  // Handle selectedJobId from context (e.g., from search)
+  // Fetch jobs when subtopic changes
+  React.useEffect(() => {
+    if (subTopicId) {
+      fetchJobs(teamId, topicId, subTopicId);
+    }
+  }, [teamId, topicId, subTopicId, fetchJobs]);
+
+  // Handle selectedJobId from context (e.g., from search or inbox)
   React.useEffect(() => {
     if (selectedSubTopic?.selectedJobId) {
       setSelectedJobId(selectedSubTopic.selectedJobId);
-    } else if (selectedSubTopic?.selectedJobId === undefined) {
-      // Explicitly clear selectedJobId when it's undefined in context
-      setSelectedJobId(null);
     }
   }, [selectedSubTopic?.selectedJobId]);
 
-  // Reset selectedJobId when subtopic changes
+  // Reset selectedJobId when subtopic changes, but only if no selectedJobId is coming from context
   React.useEffect(() => {
-    setSelectedJobId(null);
-  }, [subTopicId]);
+    if (!selectedSubTopic?.selectedJobId) {
+      setSelectedJobId(null);
+    }
+  }, [subTopicId, selectedSubTopic?.selectedJobId]);
   const [selectedJobs, setSelectedJobs] = React.useState<Set<string>>(
     new Set(),
   );
@@ -158,16 +175,15 @@ export function JobsTable({
     workerName: string;
     status: JobStatus;
     priority: JobPriority;
-    progress: number;
     startDate: string;
     endDate: string;
   } | null>(null);
   const [newJob, setNewJob] = React.useState({
     name: "",
     workerName: "",
+    workerId: "",
     status: "Belum dimulai" as JobStatus,
     priority: "Sedang" as JobPriority,
-    progress: 0,
     document: "",
     startDate: "",
     endDate: "",
@@ -191,43 +207,41 @@ export function JobsTable({
     setIsEditingDescription(false);
   };
 
-  const handleAddJob = () => {
+  const handleAddJob = async () => {
     if (
       !newJob.name ||
-      !newJob.workerName ||
+      !newJob.workerId ||
       !newJob.startDate ||
       !newJob.endDate
     ) {
       return;
     }
 
-    // Convert date format from YYYY-MM-DD to DD/MM/YYYY
-    const formatDate = (dateString: string) => {
-      const [year, month, day] = dateString.split("-");
-      return `${day}/${month}/${year}`;
-    };
+    try {
+      await addJob(teamId, {
+        ...newJob,
+        startDate: newJob.startDate,
+        endDate: newJob.endDate,
+        teamId,
+        topicId,
+        subTopicId,
+      });
 
-    addJob({
-      ...newJob,
-      startDate: formatDate(newJob.startDate),
-      endDate: formatDate(newJob.endDate),
-      teamId,
-      topicId,
-      subTopicId,
-    });
-
-    // Reset form
-    setNewJob({
-      name: "",
-      workerName: "",
-      status: "Belum dimulai" as JobStatus,
-      priority: "Sedang" as JobPriority,
-      progress: 0,
-      document: "",
-      startDate: "",
-      endDate: "",
-    });
-    setIsAddJobOpen(false);
+      // Reset form
+      setNewJob({
+        name: "",
+        workerName: "",
+        workerId: "",
+        status: "Belum dimulai" as JobStatus,
+        priority: "Sedang" as JobPriority,
+        document: "",
+        startDate: "",
+        endDate: "",
+      });
+      setIsAddJobOpen(false);
+    } catch (error) {
+      console.error("Failed to add job:", error);
+    }
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -249,10 +263,10 @@ export function JobsTable({
     setSelectedJobs(newSelected);
   };
 
-  const handleDeleteSelected = () => {
-    selectedJobs.forEach((jobId) => {
-      removeJob(jobId);
-    });
+  const handleDeleteSelected = async () => {
+    for (const jobId of selectedJobs) {
+      await removeJob(teamId, jobId);
+    }
     setSelectedJobs(new Set());
   };
 
@@ -271,30 +285,30 @@ export function JobsTable({
         workerName: job.workerName,
         status: job.status,
         priority: job.priority,
-        progress: job.progress,
         startDate: formatDateForInput(job.startDate),
         endDate: formatDateForInput(job.endDate),
       });
     }
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingJobId || !editingJob) return;
 
-    // Convert date format from YYYY-MM-DD to DD/MM/YYYY
-    const formatDate = (dateString: string) => {
-      const [year, month, day] = dateString.split("-");
-      return `${day}/${month}/${year}`;
-    };
+    try {
+      await updateJob(teamId, editingJobId, {
+        name: editingJob.name,
+        workerName: editingJob.workerName,
+        status: editingJob.status,
+        priority: editingJob.priority,
+        startDate: editingJob.startDate,
+        endDate: editingJob.endDate,
+      });
 
-    updateJob(editingJobId, {
-      ...editingJob,
-      startDate: formatDate(editingJob.startDate),
-      endDate: formatDate(editingJob.endDate),
-    });
-
-    setEditingJobId(null);
-    setEditingJob(null);
+      setEditingJobId(null);
+      setEditingJob(null);
+    } catch (error) {
+      console.error("Failed to save edit:", error);
+    }
   };
 
   const handleCancelEdit = () => {
@@ -315,103 +329,6 @@ export function JobsTable({
     setCurrentPage(1);
   }, [teamId, topicId, subTopicId]);
 
-  // Add sample data for demonstration
-  React.useEffect(() => {
-    if (jobs.length === 0 && !hasInitialized) {
-      // Add some sample jobs
-      const sampleJobs = [
-        {
-          name: `${subTopicName} Lantai 1`,
-          workerName: "Bima",
-          status: "Belum dimulai" as JobStatus,
-          priority: "Tinggi" as JobPriority,
-          progress: 0,
-          document: "",
-          startDate: "07/08/2025",
-          endDate: "14/08/2025",
-          teamId,
-          topicId,
-          subTopicId,
-        },
-        {
-          name: `${subTopicName} Lantai 2`,
-          workerName: "Bima",
-          status: "Selesai" as JobStatus,
-          priority: "Tinggi" as JobPriority,
-          progress: 0,
-          document: "DLT_2.pdf",
-          startDate: "01/08/2025",
-          endDate: "07/08/2025",
-          teamId,
-          topicId,
-          subTopicId,
-        },
-        {
-          name: `${subTopicName} Lantai 3`,
-          workerName: "Hendra",
-          status: "Dikerjakan" as JobStatus,
-          priority: "Sedang" as JobPriority,
-          progress: 50,
-          document: "",
-          startDate: "03/08/2025",
-          endDate: "10/08/2025",
-          teamId,
-          topicId,
-          subTopicId,
-        },
-        {
-          name: `${subTopicName} Lantai 4`,
-          workerName: "Hendra",
-          status: "Belum dimulai" as JobStatus,
-          priority: "Sedang" as JobPriority,
-          progress: 50,
-          document: "",
-          startDate: "07/08/2025",
-          endDate: "14/08/2025",
-          teamId,
-          topicId,
-          subTopicId,
-        },
-        {
-          name: `${subTopicName} Lantai 5`,
-          workerName: "Bram",
-          status: "Selesai" as JobStatus,
-          priority: "Rendah" as JobPriority,
-          progress: 100,
-          document: "DLT_5.pdf",
-          startDate: "01/08/2025",
-          endDate: "07/08/2025",
-          teamId,
-          topicId,
-          subTopicId,
-        },
-        {
-          name: `${subTopicName} Lantai 6`,
-          workerName: "Bram",
-          status: "Dikerjakan" as JobStatus,
-          priority: "Rendah" as JobPriority,
-          progress: 100,
-          document: "",
-          startDate: "03/08/2025",
-          endDate: "10/08/2025",
-          teamId,
-          topicId,
-          subTopicId,
-        },
-      ];
-      sampleJobs.forEach((job) => addJob(job));
-      setHasInitialized(true);
-    }
-  }, [
-    teamId,
-    topicId,
-    subTopicId,
-    jobs.length,
-    hasInitialized,
-    addJob,
-    subTopicName,
-  ]);
-
   // Show job detail if a job is selected
   if (selectedJobId) {
     return (
@@ -426,134 +343,141 @@ export function JobsTable({
   }
 
   return (
-    <div className="flex-1 p-4 md:p-6 lg:p-8">
-      {/* Breadcrumbs */}
-      <div className="mb-4 md:mb-6">
-        <Breadcrumb>
-          <BreadcrumbList className="flex-wrap">
-            <BreadcrumbItem>
-              <BreadcrumbLink
-                href="#"
-                className="flex items-center gap-1 text-sm md:text-base text-gray-600 hover:text-gray-900"
-              >
-                <Home className="h-3 w-3 md:h-4 md:w-4" />
-                <span className="hidden sm:inline">{teamName}</span>
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbLink
-                href="#"
-                className="text-sm md:text-base text-gray-600 hover:text-gray-900 truncate max-w-[100px] sm:max-w-none"
-              >
-                {topicName}
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage className="flex items-center gap-1 text-sm md:text-base text-gray-900 font-medium truncate max-w-[120px] sm:max-w-none">
-                <Layers className="h-3 w-3 md:h-4 md:w-4" />
-                {subTopicName}
-              </BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
-      </div>
-
-      <div className="mb-4 md:mb-6">
-        <div className="flex items-center gap-2 mb-3 md:mb-4">
-          <div className="p-1.5 md:p-2 bg-blue-100 rounded-lg">
-            <Layers className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
-          </div>
-          <h1 className="text-xl md:text-2xl font-bold">{subTopicName}</h1>
+    <div className="flex-1 flex flex-col h-[calc(100vh-57px)] overflow-hidden">
+      {/* Sticky Header Section */}
+      <div className="flex-shrink-0 bg-white px-4 md:px-6 lg:px-8 pt-4 md:pt-6 lg:pt-8 border-b">
+        {/* Breadcrumbs */}
+        <div className="mb-4 md:mb-6">
+          <Breadcrumb>
+            <BreadcrumbList className="flex-wrap">
+              <BreadcrumbItem>
+                <BreadcrumbLink
+                  href="#"
+                  className="flex items-center gap-1 text-sm md:text-base text-gray-600 hover:text-gray-900"
+                >
+                  <Home className="h-3 w-3 md:h-4 md:w-4" />
+                  <span className="hidden sm:inline">{teamName}</span>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbLink
+                  href="#"
+                  className="text-sm md:text-base text-gray-600 hover:text-gray-900 truncate max-w-[100px] sm:max-w-none"
+                >
+                  {topicName}
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage className="flex items-center gap-1 text-sm md:text-base text-gray-900 font-medium truncate max-w-[120px] sm:max-w-none">
+                  <Layers className="h-3 w-3 md:h-4 md:w-4" />
+                  {subTopicName}
+                </BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
         </div>
-        {isEditingDescription ? (
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={editedDescription}
-              onChange={(e) => setEditedDescription(e.target.value)}
-              placeholder="Tambahkan deskripsi di sini..."
-              className="flex-1 px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              autoFocus
-            />
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleSaveDescription}
-              className="h-7 w-7 p-0"
-            >
-              <Check className="h-4 w-4 text-green-600" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleCancelDescriptionEdit}
-              className="h-7 w-7 p-0"
-            >
-              <X className="h-4 w-4 text-red-600" />
-            </Button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <p
-              className={`text-xs md:text-sm ${subTopicDescription?.trim() ? "text-gray-600" : "text-gray-400 italic"}`}
-            >
-              {subTopicDescription?.trim() || "Tambahkan deskripsi di sini..."}
-            </p>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsEditingDescription(true)}
-              className="h-6 w-6 p-0"
-            >
-              <Pencil className="h-3 w-3 text-gray-500" />
-            </Button>
-          </div>
-        )}
-      </div>
 
-      {/* Tabs */}
-      <div className="mb-4 md:mb-6 border-b overflow-x-auto">
-        <div className="flex gap-4 md:gap-6 min-w-max">
-          <button
-            onClick={() => setActiveTab("list")}
-            className={`pb-2 md:pb-3 px-1 font-medium text-xs md:text-sm flex items-center gap-1.5 md:gap-2 whitespace-nowrap border-b-2 transition-colors ${
-              activeTab === "list"
-                ? "border-black text-gray-900"
-                : "border-transparent text-gray-500 hover:text-gray-900"
-            }`}
-          >
-            <List className="w-4 h-4" />
-            List Pekerjaan
-          </button>
-          <button
-            onClick={() => setActiveTab("status")}
-            className={`pb-2 md:pb-3 px-1 font-medium text-xs md:text-sm flex items-center gap-1.5 md:gap-2 whitespace-nowrap border-b-2 transition-colors ${
-              activeTab === "status"
-                ? "border-black text-gray-900"
-                : "border-transparent text-gray-500 hover:text-gray-900"
-            }`}
-          >
-            <LayoutGrid className="w-3 h-3 md:w-4 md:h-4" />
-            Status Pekerjaan
-          </button>
-          <button
-            onClick={() => setActiveTab("chart")}
-            className={`pb-2 md:pb-3 px-1 font-medium text-xs md:text-sm flex items-center gap-1.5 md:gap-2 whitespace-nowrap border-b-2 transition-colors ${
-              activeTab === "chart"
-                ? "border-black text-gray-900"
-                : "border-transparent text-gray-500 hover:text-gray-900"
-            }`}
-          >
-            <PieChart className="w-4 h-4" />
-            Chart
-          </button>
+        <div className="mb-4 md:mb-6">
+          <div className="flex items-center gap-2 mb-3 md:mb-4">
+            <div className="p-1.5 md:p-2 bg-blue-100 rounded-lg">
+              <Layers className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
+            </div>
+            <h1 className="text-xl md:text-2xl font-bold">{subTopicName}</h1>
+          </div>
+          {isEditingDescription ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={editedDescription}
+                onChange={(e) => setEditedDescription(e.target.value)}
+                placeholder="Tambahkan deskripsi di sini..."
+                className="flex-1 px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSaveDescription}
+                className="h-7 w-7 p-0"
+              >
+                <Check className="h-4 w-4 text-green-600" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCancelDescriptionEdit}
+                className="h-7 w-7 p-0"
+              >
+                <X className="h-4 w-4 text-red-600" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <p
+                className={`text-xs md:text-sm ${subTopicDescription?.trim() ? "text-gray-600" : "text-gray-400 italic"}`}
+              >
+                {subTopicDescription?.trim() || (isManager ? "Tambahkan deskripsi di sini..." : "Belum ada deskripsi")}
+              </p>
+              {isManager && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsEditingDescription(true)}
+                  className="h-6 w-6 p-0"
+                >
+                  <Pencil className="h-3 w-3 text-gray-500" />
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Tabs */}
+        <div className="overflow-x-auto">
+          <div className="flex gap-4 md:gap-6 min-w-max">
+            <button
+              onClick={() => setActiveTab("list")}
+              className={`pb-2 md:pb-3 px-1 font-medium text-xs md:text-sm flex items-center gap-1.5 md:gap-2 whitespace-nowrap border-b-2 transition-colors ${
+                activeTab === "list"
+                  ? "border-black text-gray-900"
+                  : "border-transparent text-gray-500 hover:text-gray-900"
+              }`}
+            >
+              <List className="w-4 h-4" />
+              List Pekerjaan
+            </button>
+            <button
+              onClick={() => setActiveTab("status")}
+              className={`pb-2 md:pb-3 px-1 font-medium text-xs md:text-sm flex items-center gap-1.5 md:gap-2 whitespace-nowrap border-b-2 transition-colors ${
+                activeTab === "status"
+                  ? "border-black text-gray-900"
+                  : "border-transparent text-gray-500 hover:text-gray-900"
+              }`}
+            >
+              <LayoutGrid className="w-3 h-3 md:w-4 md:h-4" />
+              Status Pekerjaan
+            </button>
+            <button
+              onClick={() => setActiveTab("chart")}
+              className={`pb-2 md:pb-3 px-1 font-medium text-xs md:text-sm flex items-center gap-1.5 md:gap-2 whitespace-nowrap border-b-2 transition-colors ${
+                activeTab === "chart"
+                  ? "border-black text-gray-900"
+                  : "border-transparent text-gray-500 hover:text-gray-900"
+              }`}
+            >
+              <PieChart className="w-4 h-4" />
+              Chart
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Action buttons for selected items */}
-      {selectedJobs.size > 0 && (
+      {/* Scrollable Content Area */}
+      <div className="flex-1 overflow-auto p-4 md:p-6 lg:p-8">
+      {/* Action buttons for selected items - Only for managers */}
+        {isManager && selectedJobs.size > 0 && (
         <div className="mb-4 flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
           <span className="text-sm text-gray-700">
             {selectedJobs.size} item dipilih
@@ -587,9 +511,11 @@ export function JobsTable({
                   onCheckedChange={handleSelectAll}
                 />
               </TableHead>
+              {isManager && (
               <TableHead className="w-24 font-semibold text-gray-700 text-center">
                 Edit
               </TableHead>
+              )}
               <TableHead className="font-semibold text-gray-700 text-left">
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4" />
@@ -616,12 +542,6 @@ export function JobsTable({
               </TableHead>
               <TableHead className="font-semibold text-gray-700 text-left">
                 <div className="flex items-center gap-2">
-                  <Zap className="w-4 h-4" />
-                  Progress
-                </div>
-              </TableHead>
-              <TableHead className="font-semibold text-gray-700 text-left">
-                <div className="flex items-center gap-2">
                   <Calendar className="w-4 h-4" />
                   Tanggal Mulai
                 </div>
@@ -638,11 +558,10 @@ export function JobsTable({
             {jobs.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={9}
+                  colSpan={isManager ? 8 : 7}
                   className="text-center py-12 text-gray-500"
                 >
-                  Belum ada pekerjaan. Klik tombol &quot;+ Tambah
-                  Pekerjaan&quot; untuk menambahkan.
+                  Belum ada pekerjaan. {isManager && 'Klik tombol "+ Tambah Pekerjaan" untuk menambahkan.'}
                 </TableCell>
               </TableRow>
             ) : (
@@ -658,6 +577,7 @@ export function JobsTable({
                         }
                       />
                     </TableCell>
+                    {isManager && (
                     <TableCell className="text-center">
                       {isEditing ? (
                         <div className="flex items-center gap-1 justify-center">
@@ -689,6 +609,7 @@ export function JobsTable({
                         </Button>
                       )}
                     </TableCell>
+                    )}
                     <TableCell className="font-medium text-center">
                       {isEditing ? (
                         <Input
@@ -713,17 +634,27 @@ export function JobsTable({
                     </TableCell>
                     <TableCell className="text-center">
                       {isEditing ? (
-                        <Input
+                        <Select
                           value={editingJob?.workerName || ""}
-                          onChange={(e) =>
+                          onValueChange={(value) =>
                             editingJob &&
                             setEditingJob({
                               ...editingJob,
-                              workerName: e.target.value,
+                              workerName: value,
                             })
                           }
-                          className="h-8"
-                        />
+                        >
+                          <SelectTrigger className="h-8">
+                            <SelectValue placeholder="Pilih pekerja" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {members.map((member) => (
+                              <SelectItem key={member.id} value={member.name}>
+                                {member.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       ) : (
                         job.workerName
                       )}
@@ -803,36 +734,6 @@ export function JobsTable({
                     <TableCell className="text-center">
                       {isEditing ? (
                         <Input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={editingJob?.progress || 0}
-                          onChange={(e) =>
-                            editingJob &&
-                            setEditingJob({
-                              ...editingJob,
-                              progress: parseInt(e.target.value) || 0,
-                            })
-                          }
-                          className="h-8 w-20"
-                        />
-                      ) : (
-                        <div className="flex items-center gap-2 justify-center">
-                          <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-[100px]">
-                            <div
-                              className={`h-2 rounded-full ${getProgressColor(job.progress)}`}
-                              style={{ width: `${job.progress}%` }}
-                            ></div>
-                          </div>
-                          <span className="text-sm text-gray-600 min-w-[35px]">
-                            {job.progress}%
-                          </span>
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      {isEditing ? (
-                        <Input
                           type="date"
                           value={editingJob?.startDate || ""}
                           onChange={(e) =>
@@ -870,7 +771,8 @@ export function JobsTable({
                 );
               })
             )}
-            {/* Add Job Row */}
+            {/* Add Job Row - Only for managers */}
+            {isManager && (
             <TableRow className="hover:bg-gray-50">
               <TableCell colSpan={9} className="py-3">
                 <Dialog open={isAddJobOpen} onOpenChange={setIsAddJobOpen}>
@@ -901,14 +803,31 @@ export function JobsTable({
                       </div>
                       <div className="grid gap-2">
                         <Label htmlFor="workerName">Nama Pekerja *</Label>
-                        <Input
-                          id="workerName"
-                          value={newJob.workerName}
-                          onChange={(e) =>
-                            setNewJob({ ...newJob, workerName: e.target.value })
-                          }
-                          placeholder="Masukkan nama pekerja"
-                        />
+                        <Select
+                          value={newJob.workerId}
+                          onValueChange={(value) => {
+                            const selectedMember = members.find(m => m.id === value);
+                            setNewJob({ 
+                              ...newJob, 
+                              workerId: value,
+                              workerName: selectedMember?.name || ""
+                            });
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Pilih pekerja" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {members.map((member) => (
+                              <SelectItem key={member.id} value={member.id}>
+                                <div className="flex items-center gap-2">
+                                  <User className="h-4 w-4 text-gray-500" />
+                                  {member.name}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="grid gap-2">
@@ -955,23 +874,6 @@ export function JobsTable({
                             </SelectContent>
                           </Select>
                         </div>
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="progress">Progress (%)</Label>
-                        <Input
-                          id="progress"
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={newJob.progress}
-                          onChange={(e) =>
-                            setNewJob({
-                              ...newJob,
-                              progress: parseInt(e.target.value) || 0,
-                            })
-                          }
-                          placeholder="0"
-                        />
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="grid gap-2">
@@ -1024,6 +926,7 @@ export function JobsTable({
                 </Dialog>
               </TableCell>
             </TableRow>
+            )}
           </TableBody>
         </Table>
       </div>
@@ -1107,6 +1010,7 @@ export function JobsTable({
           subTopicId={subTopicId} 
         />
       )}
+      </div>
     </div>
   );
 }

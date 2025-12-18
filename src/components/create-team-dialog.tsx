@@ -25,35 +25,47 @@ export function CreateTeamDialog({ children }: CreateTeamDialogProps) {
   const [teamName, setTeamName] = React.useState("");
   const [topik, setTopik] = React.useState("");
   const [subTopik, setSubTopik] = React.useState("");
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (isSubmitting) return;
+    
+    setIsSubmitting(true);
+    
+    try {
+      // Add team to context with new structure
+      await addTeam({
+        name: teamName,
+        topics: [
+          {
+            name: topik,
+            subTopics: [
+              {
+                name: subTopik,
+                description: "",
+              },
+            ],
+          },
+        ],
+      });
 
-    // Add team to context with new structure
-    addTeam({
-      name: teamName,
-      topics: [
-        {
-          id: Math.random().toString(36).substring(7),
-          name: topik,
-          subTopics: [
-            {
-              id: Math.random().toString(36).substring(7),
-              name: subTopik,
-              description: "",
-            },
-          ],
-        },
-      ],
-    });
+      // Close dialog after submission
+      setOpen(false);
 
-    // Close dialog after submission
-    setOpen(false);
-
-    // Reset form
-    setTeamName("");
-    setTopik("");
-    setSubTopik("");
+      // Reset form
+      setTeamName("");
+      setTopik("");
+      setSubTopik("");
+    } catch (error: unknown) {
+      console.error("Failed to create team:", error);
+      const err = error as { response?: { data?: { message?: string } }; message?: string };
+      const errorMessage = err.response?.data?.message || err.message || "Failed to create team. Please try again.";
+      alert(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -137,8 +149,9 @@ export function CreateTeamDialog({ children }: CreateTeamDialogProps) {
             <Button
               type="submit"
               className="bg-black hover:bg-gray-800 text-white px-6 sm:px-8 h-9 sm:h-10 text-sm"
+              disabled={isSubmitting}
             >
-              Buat Tim
+              {isSubmitting ? "Membuat..." : "Buat Tim"}
             </Button>
           </div>
         </form>

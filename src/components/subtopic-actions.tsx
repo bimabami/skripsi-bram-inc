@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useTeams, SubTopic } from "@/contexts/teams-context";
+import { useMembersContext } from "@/contexts/members-context";
 
 interface SubTopicActionsProps {
   teamId: string;
@@ -32,15 +33,21 @@ export function SubTopicActions({
   subTopic,
 }: SubTopicActionsProps) {
   const { updateSubTopic, removeSubTopic } = useTeams();
+  const { currentUserRole } = useMembersContext();
   const [editDialogOpen, setEditDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [subTopicName, setSubTopicName] = React.useState(subTopic.name);
+  
+  // Only managers can edit/delete subtopics
+  const isManager = currentUserRole === "MANAGER";
 
   React.useEffect(() => {
     if (editDialogOpen) {
       setSubTopicName(subTopic.name);
     }
   }, [editDialogOpen, subTopic.name]);
+  
+  if (!isManager) return null;
 
   const handleEdit = (e: React.FormEvent) => {
     e.preventDefault();

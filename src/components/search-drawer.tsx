@@ -12,6 +12,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { useTeams } from "@/contexts/teams-context";
 import { useJobs } from "@/contexts/jobs-context";
+import { useMembersContext } from "@/contexts/members-context";
 import {
   Search,
   Layers,
@@ -43,8 +44,9 @@ interface SearchResult {
 }
 
 export function SearchDrawer({ open, onOpenChange }: SearchDrawerProps) {
-  const { teams, setSelectedSubTopic } = useTeams();
+  const { teams, setSelectedSubTopic, setSelectedTeam } = useTeams();
   const { jobs } = useJobs();
+  const { fetchTeamMembers } = useMembersContext();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [results, setResults] = React.useState<SearchResult[]>([]);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -157,9 +159,19 @@ export function SearchDrawer({ open, onOpenChange }: SearchDrawerProps) {
     setResults(searchResults);
   }, [searchQuery, teams, jobs]);
 
+  // Helper to set up team context when navigating
+  const setupTeamContext = (teamId: string) => {
+    const team = teams.find((t) => t.id === teamId);
+    if (team) {
+      setSelectedTeam(team);
+      fetchTeamMembers(teamId);
+    }
+  };
+
   const handleResultClick = (result: SearchResult) => {
     // For jobs, navigate to the subtopic AND open the job detail
     if (result.type === "job") {
+      setupTeamContext(result.teamId!);
       setSelectedSubTopic({
         teamId: result.teamId!,
         topicId: result.topicId!,
@@ -175,6 +187,7 @@ export function SearchDrawer({ open, onOpenChange }: SearchDrawerProps) {
     }
     // For subtopics, navigate to the subtopic (clear any selected job)
     else if (result.type === "subtopic") {
+      setupTeamContext(result.teamId!);
       setSelectedSubTopic({
         teamId: result.teamId!,
         topicId: result.topicId!,
@@ -195,6 +208,7 @@ export function SearchDrawer({ open, onOpenChange }: SearchDrawerProps) {
       const firstSubTopic = topic?.subTopics[0];
       
       if (team && topic && firstSubTopic) {
+        setupTeamContext(team.id);
         setSelectedSubTopic({
           teamId: team.id,
           topicId: topic.id,
@@ -216,6 +230,7 @@ export function SearchDrawer({ open, onOpenChange }: SearchDrawerProps) {
       const firstSubTopic = firstTopic?.subTopics[0];
       
       if (team && firstTopic && firstSubTopic) {
+        setupTeamContext(team.id);
         setSelectedSubTopic({
           teamId: team.id,
           topicId: firstTopic.id,

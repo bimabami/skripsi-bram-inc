@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useTeams, Team } from "@/contexts/teams-context";
+import { useMembersContext } from "@/contexts/members-context";
 
 interface TeamActionsProps {
   team: Team;
@@ -26,10 +27,14 @@ interface TeamActionsProps {
 
 export function TeamActions({ team }: TeamActionsProps) {
   const { removeTeam, updateTeam } = useTeams();
+  const { currentUserRole } = useMembersContext();
   const [editDialogOpen, setEditDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
 
   const [teamName, setTeamName] = React.useState(team.name);
+  
+  // Only managers can edit/delete teams
+  const isManager = currentUserRole === "MANAGER";
 
   // Reset form when dialog opens
   React.useEffect(() => {
@@ -37,6 +42,8 @@ export function TeamActions({ team }: TeamActionsProps) {
       setTeamName(team.name);
     }
   }, [editDialogOpen, team]);
+  
+  if (!isManager) return null;
 
   const handleEdit = (e: React.FormEvent) => {
     e.preventDefault();

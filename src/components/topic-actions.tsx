@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useTeams, Topic } from "@/contexts/teams-context";
+import { useMembersContext } from "@/contexts/members-context";
 
 interface TopicActionsProps {
   teamId: string;
@@ -27,15 +28,21 @@ interface TopicActionsProps {
 
 export function TopicActions({ teamId, topic }: TopicActionsProps) {
   const { updateTopic, removeTopic } = useTeams();
+  const { currentUserRole } = useMembersContext();
   const [editDialogOpen, setEditDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [topicName, setTopicName] = React.useState(topic.name);
+  
+  // Only managers can edit/delete topics
+  const isManager = currentUserRole === "MANAGER";
 
   React.useEffect(() => {
     if (editDialogOpen) {
       setTopicName(topic.name);
     }
   }, [editDialogOpen, topic.name]);
+  
+  if (!isManager) return null;
 
   const handleEdit = (e: React.FormEvent) => {
     e.preventDefault();

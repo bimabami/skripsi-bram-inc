@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/sheet";
 import { useInbox } from "@/contexts/inbox-context";
 import { useTeams } from "@/contexts/teams-context";
-import { useJobs } from "@/contexts/jobs-context";
+import { useMembersContext } from "@/contexts/members-context";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Inbox as InboxIcon } from "lucide-react";
@@ -21,8 +21,8 @@ interface InboxDrawerProps {
 
 export function InboxDrawer({ open, onOpenChange }: InboxDrawerProps) {
   const { messages, markAsRead } = useInbox();
-  const { setSelectedSubTopic } = useTeams();
-  const { jobs } = useJobs();
+  const { setSelectedSubTopic, setSelectedTeam, teams } = useTeams();
+  const { fetchTeamMembers } = useMembersContext();
 
   const handleMessageClick = (messageId: string) => {
     const message = messages.find((m) => m.id === messageId);
@@ -30,23 +30,22 @@ export function InboxDrawer({ open, onOpenChange }: InboxDrawerProps) {
     
     // Navigate to the job if it has linking information
     if (message && message.teamId && message.topicId && message.subTopicId) {
-      // Try to find the actual job by matching the subject name
-      const job = jobs.find((j) => 
-        j.name === message.subject &&
-        j.teamId === message.teamId &&
-        j.topicId === message.topicId &&
-        j.subTopicId === message.subTopicId
-      );
+      // Set the selected team and fetch team members for proper context
+      const team = teams.find(t => t.id === message.teamId);
+      if (team) {
+        setSelectedTeam(team);
+        fetchTeamMembers(message.teamId);
+      }
       
       setSelectedSubTopic({
         teamId: message.teamId,
         topicId: message.topicId,
         subTopicId: message.subTopicId,
-        subTopicName: message.subTopicName!,
-        subTopicDescription: message.subTopicDescription!,
-        teamName: message.teamName!,
-        topicName: message.topicName!,
-        selectedJobId: job?.id, // Use the actual job ID if found
+        subTopicName: message.subTopicName || "",
+        subTopicDescription: message.subTopicDescription || "",
+        teamName: message.teamName || "",
+        topicName: message.topicName || "",
+        selectedJobId: message.jobId, // Use the jobId directly from the message
       });
       onOpenChange(false);
     }
@@ -67,10 +66,10 @@ export function InboxDrawer({ open, onOpenChange }: InboxDrawerProps) {
                 <InboxIcon className="h-8 w-8 text-gray-400" />
               </div>
               <p className="text-sm font-medium text-gray-900 mb-1">
-                No messages yet
+                Belum ada pesan
               </p>
               <p className="text-sm text-gray-500">
-                When you get notifications, they&apos;ll show up here
+                Notifikasi akan muncul di sini ketika ada @mention di komentar
               </p>
             </div>
           ) : (

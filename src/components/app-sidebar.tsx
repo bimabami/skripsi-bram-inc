@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronRight,
   Layers,
+  LogOut,
 } from "lucide-react";
 
 import {
@@ -29,6 +30,8 @@ import { Badge } from "@/components/ui/badge";
 import { CreateTeamDialog } from "./create-team-dialog";
 import { useTeams } from "@/contexts/teams-context";
 import { useInbox } from "@/contexts/inbox-context";
+import { useAuth } from "@/contexts/auth-context";
+import { useMembersContext } from "@/contexts/members-context";
 import {
   Collapsible,
   CollapsibleContent,
@@ -39,12 +42,23 @@ import { TopicActions } from "./topic-actions";
 import { SubTopicActions } from "./subtopic-actions";
 import { InboxDrawer } from "./inbox-drawer";
 import { SearchDrawer } from "./search-drawer";
+import { MembersDrawer } from "./members-drawer";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export function AppSidebar() {
-  const { teams, addTopic, addSubTopic, setSelectedSubTopic } = useTeams();
+  const { teams, addTopic, addSubTopic, setSelectedSubTopic, setSelectedTeam } = useTeams();
   const { unreadCount } = useInbox();
+  const { user, logout } = useAuth();
+  const { fetchTeamMembers, currentUserRole } = useMembersContext();
   const [inboxOpen, setInboxOpen] = React.useState(false);
   const [searchOpen, setSearchOpen] = React.useState(false);
+  const [membersOpen, setMembersOpen] = React.useState(false);
   const [openTeams, setOpenTeams] = React.useState<Record<string, boolean>>({});
   const [addingTopic, setAddingTopic] = React.useState<string | null>(null);
   const [addingSubTopic, setAddingSubTopic] = React.useState<{
@@ -53,6 +67,9 @@ export function AppSidebar() {
   } | null>(null);
   const [newTopicName, setNewTopicName] = React.useState("");
   const [newSubTopicName, setNewSubTopicName] = React.useState("");
+  
+  // Check if current user is a manager
+  const isManager = currentUserRole === "MANAGER";
 
   // Global keyboard shortcut for search (Ctrl+K or Cmd+K)
   React.useEffect(() => {
@@ -76,6 +93,14 @@ export function AppSidebar() {
     teamName: string,
     topicName: string,
   ) => {
+    // Set selected team when clicking subtopic
+    const team = teams.find(t => t.id === teamId);
+    if (team) {
+      setSelectedTeam(team);
+      // Fetch team members and set current user's role for this team
+      fetchTeamMembers(teamId);
+    }
+    
     setSelectedSubTopic({
       teamId,
       topicId,
@@ -93,6 +118,14 @@ export function AppSidebar() {
       ...prev,
       [teamId]: !prev[teamId],
     }));
+    
+    // Set selected team when toggling
+    const team = teams.find(t => t.id === teamId);
+    if (team) {
+      setSelectedTeam(team);
+      // Fetch team members and set current user's role for this team
+      fetchTeamMembers(teamId);
+    }
   };
 
   const handleAddTopic = (teamId: string) => {
@@ -114,14 +147,38 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
-        <div className="flex items-center gap-3">
-          <Avatar className="h-10 w-10 rounded-lg">
-            <AvatarFallback className="rounded-lg bg-gray-700 text-white">
-              G
-            </AvatarFallback>
-          </Avatar>
-          <span className="font-semibold">Galang</span>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex items-center gap-3 w-full hover:bg-gray-100 rounded-lg p-1 -m-1 transition-colors">
+              <Avatar className="h-10 w-10 rounded-lg">
+                <AvatarFallback className="rounded-lg bg-gray-700 text-white">
+                  {user?.name?.charAt(0).toUpperCase() || "U"}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 text-left">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">{user?.name || "User"}</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full ${user?.role === "MANAGER" ? "bg-yellow-100 text-yellow-700" : "bg-blue-100 text-blue-700"}`}>
+                    {user?.role || "STAFF"}
+                  </span>
+                </div>
+                <span className="text-xs text-gray-500">{user?.email}</span>
+              </div>
+              <ChevronDown className="h-4 w-4 text-gray-400" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <div className="px-2 py-1.5">
+              <p className="text-sm font-medium">{user?.name}</p>
+              <p className="text-xs text-gray-500">{user?.email}</p>
+            </div>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={logout} className="text-red-600 cursor-pointer">
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </SidebarHeader>
 
       <SidebarContent>
@@ -145,7 +202,7 @@ export function AppSidebar() {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton>
+              <SidebarMenuButton onClick={() => setMembersOpen(true)}>
                 <Users />
                 <span>Anggota</span>
               </SidebarMenuButton>
@@ -155,6 +212,7 @@ export function AppSidebar() {
         
         <SearchDrawer open={searchOpen} onOpenChange={setSearchOpen} />
         <InboxDrawer open={inboxOpen} onOpenChange={setInboxOpen} />
+        <MembersDrawer open={membersOpen} onOpenChange={setMembersOpen} />
 
         {/* Teams List */}
         {teams.map((team) => (
@@ -220,8 +278,8 @@ export function AppSidebar() {
                             </div>
                           </SidebarMenuSubItem>
                         ))}
-                        {/* Add SubTopic Button */}
-                        {addingSubTopic?.teamId === team.id &&
+                        {/* Add SubTopic Button - Only for managers */}
+                        {isManager && (addingSubTopic?.teamId === team.id &&
                         addingSubTopic?.topicId === topic.id ? (
                           <SidebarMenuSubItem>
                             <input
@@ -258,15 +316,15 @@ export function AppSidebar() {
                               <span>Tambah Sub Topik</span>
                             </SidebarMenuSubButton>
                           </SidebarMenuSubItem>
-                        )}
+                        ))}
                       </SidebarMenuSub>
                     </CollapsibleContent>
                   </SidebarMenuItem>
                 </Collapsible>
               ))}
 
-              {/* Add Topic Button */}
-              {addingTopic === team.id ? (
+              {/* Add Topic Button - Only for managers */}
+              {isManager && (addingTopic === team.id ? (
                 <SidebarMenuItem>
                   <input
                     type="text"
@@ -292,24 +350,26 @@ export function AppSidebar() {
                     <span>Tambah Topik</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              )}
+              ))}
             </SidebarMenu>
           </SidebarGroup>
         ))}
 
-        {/* Create Team Section */}
-        <SidebarGroup className="px-4 pt-4">
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <CreateTeamDialog>
-                <SidebarMenuButton className="bg-gray-100 hover:bg-gray-200">
-                  <span className="font-light">Buat Tim Baru di sini!</span>
-                  <Plus className="h-4 w-4 ml-auto" />
-                </SidebarMenuButton>
-              </CreateTeamDialog>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroup>
+        {/* Create Team Section - Only for managers */}
+        {isManager && (
+          <SidebarGroup className="px-4 pt-4">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <CreateTeamDialog>
+                  <SidebarMenuButton className="bg-gray-100 hover:bg-gray-200">
+                    <span className="font-light">Buat Tim Baru di sini!</span>
+                    <Plus className="h-4 w-4 ml-auto" />
+                  </SidebarMenuButton>
+                </CreateTeamDialog>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroup>
+        )}
       </SidebarContent>
     </Sidebar>
   );

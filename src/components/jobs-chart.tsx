@@ -8,15 +8,15 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogClose,
 } from "@/components/ui/dialog";
 import { 
   FileText, 
   User, 
   CheckCircle, 
   AlertTriangle, 
-  Zap, 
   Calendar,
-  File
+  X
 } from "lucide-react";
 
 interface JobsChartProps {
@@ -61,12 +61,6 @@ const getPriorityColor = (priority: JobPriority) => {
     default:
       return { bg: "bg-gray-50", text: "text-gray-700", dot: "bg-gray-500" };
   }
-};
-
-const getProgressColor = (progress: number) => {
-  if (progress === 100) return "bg-green-500";
-  if (progress >= 50) return "bg-orange-500";
-  return "bg-orange-400";
 };
 
 export function JobsChart({ teamId, topicId, subTopicId }: JobsChartProps) {
@@ -159,14 +153,23 @@ export function JobsChart({ teamId, topicId, subTopicId }: JobsChartProps) {
 
       {/* Status Detail Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-7xl w-[95vw] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-semibold">
-              Status Pekerjaan - {selectedStatus}
-            </DialogTitle>
-          </DialogHeader>
+        <DialogContent className="max-w-7xl w-[95vw] max-h-[90vh] p-0 flex flex-col">
+          {/* Fixed Header with Close Button */}
+          <div className="sticky top-0 z-10 bg-white border-b px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between">
+            <DialogHeader className="flex-1">
+              <DialogTitle className="text-lg sm:text-xl font-semibold truncate pr-2">
+                Status Pekerjaan - {selectedStatus}
+              </DialogTitle>
+            </DialogHeader>
+            <DialogClose asChild>
+              <button className="rounded-full p-2 hover:bg-gray-100 transition-colors flex-shrink-0">
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </DialogClose>
+          </div>
 
-          <div className="mt-4">
+          {/* Scrollable Content */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
@@ -197,12 +200,6 @@ export function JobsChart({ teamId, topicId, subTopicId }: JobsChartProps) {
                     </th>
                     <th className="text-left p-3 font-semibold text-gray-700">
                       <div className="flex items-center gap-2">
-                        <Zap className="w-4 h-4" />
-                        Progress
-                      </div>
-                    </th>
-                    <th className="text-left p-3 font-semibold text-gray-700">
-                      <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4" />
                         Tanggal Mulai
                       </div>
@@ -211,12 +208,6 @@ export function JobsChart({ teamId, topicId, subTopicId }: JobsChartProps) {
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4" />
                         Tanggal Selesai
-                      </div>
-                    </th>
-                    <th className="text-left p-3 font-semibold text-gray-700">
-                      <div className="flex items-center gap-2">
-                        <File className="w-4 h-4" />
-                        Dokumen
                       </div>
                     </th>
                   </tr>
@@ -259,33 +250,11 @@ export function JobsChart({ teamId, topicId, subTopicId }: JobsChartProps) {
                             </span>
                           </div>
                         </td>
-                        <td className="p-3">
-                          <div className="flex items-center gap-2">
-                            <div className="bg-gray-200 rounded-full h-2 w-20">
-                              <div
-                                className={`h-2 rounded-full ${getProgressColor(job.progress)}`}
-                                style={{ width: `${job.progress}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-sm text-gray-600 min-w-[3rem]">
-                              {job.progress}%
-                            </span>
-                          </div>
-                        </td>
-                        <td className="p-3 text-sm text-gray-600">
+                        <td className="p-3 text-sm text-gray-600 whitespace-nowrap">
                           {job.startDate}
                         </td>
-                        <td className="p-3 text-sm text-gray-600">
+                        <td className="p-3 text-sm text-gray-600 whitespace-nowrap">
                           {job.endDate}
-                        </td>
-                        <td className="p-3 text-sm text-gray-600">
-                          {job.document ? (
-                            <span className="text-blue-600">{job.document}</span>
-                          ) : (
-                            <button className="text-gray-400 hover:text-gray-600">
-                              +
-                            </button>
-                          )}
                         </td>
                       </tr>
                     );

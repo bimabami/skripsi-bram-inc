@@ -1,14 +1,46 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TeamsProvider, useTeams } from "@/contexts/teams-context";
 import { JobsProvider } from "@/contexts/jobs-context";
 import { InboxProvider } from "@/contexts/inbox-context";
+import { MembersProvider } from "@/contexts/members-context";
 import { JobsTable } from "@/components/jobs-table";
+import { useAuth } from "@/contexts/auth-context";
 
 function HomeContent() {
   const { selectedSubTopic } = useTeams();
+  const { isAuthenticated, isLoading } = useAuth();
+  const router = useRouter();
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push("/login");
+    }
+  }, [isAuthenticated, isLoading, router]);
+
+  // Show loading while checking auth
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gray-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <span className="text-white font-bold text-2xl">D</span>
+          </div>
+          <p className="text-gray-500">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render if not authenticated
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <SidebarProvider>
@@ -18,7 +50,7 @@ function HomeContent() {
         <header className="bg-white border-b">
           <div className="flex items-center gap-2 md:gap-4 p-2 md:p-4">
             <SidebarTrigger />
-            <h1 className="text-base md:text-lg font-medium">Bram Inc</h1>
+            <h1 className="text-base md:text-lg font-medium">DrawTrack</h1>
           </div>
         </header>
 
@@ -39,19 +71,19 @@ function HomeContent() {
               <div className="flex justify-center">
                 <div className="w-24 h-24 sm:w-32 sm:h-32 bg-gray-800 rounded-2xl flex items-center justify-center">
                   <span className="text-white font-bold text-4xl sm:text-6xl">
-                    B
+                    D
                   </span>
                 </div>
               </div>
               <div className="space-y-1 sm:space-y-2">
                 <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800">
-                  Halo User!
+                  DrawTrack
                 </h2>
                 <h3 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900">
-                  Selamat Datang di Bram Inc.
+                  Kelola Shop Drawing dalam Satu Platform
                 </h3>
                 <p className="text-sm sm:text-base md:text-lg text-gray-600">
-                  Silahkan untuk membuat tim baru pada side bar di kiri
+                  Pengelolaan dokumen, kontrol revisi, dan pemantauan progres pekerjaan dokumen shop drawing.
                 </p>
               </div>
             </div>
@@ -67,7 +99,9 @@ export default function Home() {
     <JobsProvider>
       <TeamsProvider>
         <InboxProvider>
-          <HomeContent />
+          <MembersProvider>
+            <HomeContent />
+          </MembersProvider>
         </InboxProvider>
       </TeamsProvider>
     </JobsProvider>
